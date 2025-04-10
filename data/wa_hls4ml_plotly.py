@@ -6,6 +6,8 @@ import os, sys
 
 def plot_results(name, mpl_plots, y_test, y_pred, X_raw_test, output_features, folder_name):
 
+    print("CHECK: X_raw_test shape:", np.asarray(X_raw_test).shape) # check the shape to figure out the plotting indexing error
+
     colors = ['blue', 'green', 'red', 'cyan', 'magenta', 'yellow', 'orange']
 
     if mpl_plots:
@@ -58,38 +60,56 @@ def plot_results(name, mpl_plots, y_test, y_pred, X_raw_test, output_features, f
         row = i // n_cols + 1
         col = i % n_cols + 1
 
-        # Iterate over each strategy
-        for strategy in [0, 1]:
-            # Create a mask for the current strategy
-            X_raw_test = np.asarray(X_raw_test)
-            mask = X_raw_test[:,
-                   strategy + 5] == 1  # assuming the 'strategy' is the 6th and 7th feature in your input data TODO: change this back for the fewer features
-            text_arr = [
-                f"{int(point[3])}-bit {int(point[0])}x{int(point[1])}x{int(point[2])} @ RF={int(point[4])} ({strat_dict[strategy]})" for
-                point in X_raw_test if point[strategy + 5] == 1]
+        # # Iterate over each strategy
+        # for strategy in [0, 1]:
+        #     # Create a mask for the current strategy
+        #     X_raw_test = np.asarray(X_raw_test)
+        #     mask = X_raw_test[:,
+        #            strategy + 5] == 1  # assuming the 'strategy' is the 6th and 7th feature in your input data TODO: change this back for the fewer features
+        #             # X_raw_test now only has 5 columns, so 
+        #     text_arr = [
+        #         f"{int(point[3])}-bit {int(point[0])}x{int(point[1])}x{int(point[2])} @ RF={int(point[4])} ({strat_dict[strategy]})" for
+        #         point in X_raw_test if point[strategy + 5] == 1]
 
-            # Create a scatter plot for each output feature and strategy
-            scatter = go.Scatter(
-                x=y_test[mask, i],
-                y=y_pred[mask, i],
-                mode='markers',
-                name=f'{output_features[i]} - {strat_dict[strategy]}',
-                legendgroup=f'{output_features[i]}',
-                marker=dict(
-                    symbol=marker_shapes[strategy],  # Use different marker shapes for different strategies
-                    color=colors[i],
-                    size=10,
-                    opacity=0.7,
-                ),
-                hovertemplate=
-                '%{text}<br>' +
-                '<i>Actual</i>: %{x}<br>' +
-                '<b>Predicted</b>: %{y}<br><extra></extra>',
-                text=text_arr
-            )
-            # Add the scatter plot to the subplot
-            fig.add_trace(scatter, row=row, col=col)
+        #     # Create a scatter plot for each output feature and strategy
+        #     scatter = go.Scatter(
+        #         x=y_test[mask, i],
+        #         y=y_pred[mask, i],
+        #         mode='markers',
+        #         name=f'{output_features[i]} - {strat_dict[strategy]}',
+        #         legendgroup=f'{output_features[i]}',
+        #         marker=dict(
+        #             symbol=marker_shapes[strategy],  # Use different marker shapes for different strategies
+        #             color=colors[i],
+        #             size=10,
+        #             opacity=0.7,
+        #         ),
+        #         hovertemplate=
+        #         '%{text}<br>' +
+        #         '<i>Actual</i>: %{x}<br>' +
+        #         '<b>Predicted</b>: %{y}<br><extra></extra>',
+        #         text=text_arr
+        #     )
+        #     # Add the scatter plot to the subplot
+        #     fig.add_trace(scatter, row=row, col=col)
         #fig.update_yaxes(scaleanchor=f"x{col}", scaleratio=1, row=row, col=col)
+
+        # No strategy column -> plot all points at once
+        X_raw_arr = np.asarray(X_raw_test)
+        mask = np.ones(X_raw_arr.shape[0], dtype=bool)
+        text_arr = [
+            f"{int(point[3])}-bit {int(point[0])}x{int(point[1])}x{int(point[2])} @ RF={int(point[4])}"
+            for point in X_raw_arr
+        ]
+        scatter = go.Scatter(
+            x=y_test[mask, i],
+            y=y_pred[mask, i],
+            mode='markers',
+            name=output_features[i],
+            marker=dict(size=10, opacity=0.7),
+            text=text_arr
+        )
+        fig.add_trace(scatter, row=row, col=col)
 
         # Add a reference line
         fig.add_trace(

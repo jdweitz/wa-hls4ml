@@ -33,6 +33,8 @@ def perform_train_and_test(train, test, regression, classification, skip_interme
     # get raw data out
     X_train, X_test, y_train, y_test, X_raw_train, X_raw_test = preprocess_data(folder_name, is_graph, input_file, needs_json_parsing = needs_json_parsing, mean=mean, stdev=stdev, doing_train_test_split = doing_train_test_split, dev = dev)
 
+    print("X_raw_test shape:", np.asarray(X_raw_test).shape) # check the shape
+
     # get just the classification task as its own variable
     y_train_classifier = y_train[:, -1]
     y_test_classifier = y_test[:, -1]
@@ -98,7 +100,9 @@ if __name__ == "__main__":
 
     parser.add_argument('--gpu', action='store_true', help='Use CUDA GPU processing for training')
     
-    parser.add_argument('--no-tts', action='store_true', help='Disable the automatic train-test split. Use only if using separate training and testing sets.', required=True)
+    # parser.add_argument('--no-tts', action='store_true', help='Disable the automatic train-test split. Use only if using separate training and testing sets.', required=True) # how can i do this if its required to be true?
+    parser.add_argument('--no-tts', action='store_true', help='Disable the automatic train-test split. Use only if using separate training and testing sets.') # removed the requirement
+
 
     parser.add_argument('--json', action='store_true', help='Parse JSON file as the input. If not given, assume that the input is a pre-parsed CSV')
 
@@ -126,7 +130,8 @@ if __name__ == "__main__":
         train = True
         test = True
 
-    no_tts = args_dict['no-tts']
+    # no_tts = args_dict['no-tts']
+    no_tts = args_dict['no_tts'] # needs to be an underscore for some reason
 
     if train and test and no_tts:
         raise ValueError('Train and test cannot both be selected if the train-test split is disabled - one or the other flag must be set alone.')

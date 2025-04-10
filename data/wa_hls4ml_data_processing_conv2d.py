@@ -6,8 +6,8 @@ import sklearn.model_selection
 import torch_geometric as pyg
 from torch_geometric.data import Data
         
-from data.wa_hls4ml_json_to_csv import parse_file
-# from wa_hls4ml_json_to_csv import parse_file # use this one to preprocess by itself
+# from data.wa_hls4ml_json_to_csv import parse_file
+from wa_hls4ml_json_to_csv import parse_file # use this one to preprocess by itself
 
 import os
 import sys
@@ -190,17 +190,38 @@ def create_graph_tensor(input_values, input_raw_values, input_json, mean, stdev,
 
     return graph_datapoint   
 
+# Note:
+# input_features = ["d_in1", "d_in2", "d_in3", "d_out1", "d_out2", "d_out3", "prec", "rf", "strategy", "rf_times_precision", "layer_type", "activation_type", "filters", "kernel_size", "stride", "padding", "pooling"]
+# encoding:
+# layer_type = [dense=0, conv1d=1, conv2d=2, separableconv1d=3, separableconv2d=4, depthwiseconv1d=5, depthwiseconv2d=6, flatten=7, maxpooling=8, averagepooling=9]
+# activation_type = [noactivation=0, relu=1, tanh=2, sigmoid=3, softmax=4]
+# padding = [same=0, valid=1]
+# - note always doing pooling=2 when its a pooling layer
+# - can use zero-padding so if feature is undefined for a particular layer, just set it to 0
 
 def preprocess_data(model_folder, is_graph = False, input_folder="../results/results_combined.csv", needs_json_parsing = False, is_already_serialized = False, mean = None, stdev = None, doing_train_test_split = True, dev = "cpu"):
     ''' Preprocess the data '''
 
-    input_features = ["d_in", "d_out", "prec", "rf", "strategy", "rf_times_precision"]
+    # input_features = ["d_in", "d_out", "prec", "rf", "strategy", "rf_times_precision"] # commented
+    # columns expected in the CSV now
+    input_features = [
+        "d_in1", "d_in2", "d_in3",
+        "d_out1", "d_out2", "d_out3",
+        "prec", "rf", "strategy", "rf_times_precision",
+        "layer_type",      # dense=0, conv1d=1, conv2d=2, separableconv1d=3, separableconv2d=4, depthwiseconv1d=5, depthwiseconv2d=6, flatten=7, maxpooling=8, averagepooling=9
+        "activation_type", # noact=0, relu=1 ,tanh=2, sigmoid=3, softmax=4
+        "filters",         # for conv layers
+        "kernel_size",     # like 3,5,7
+        "stride",          # like 1,2
+        "padding",         # same=0, valid=1
+        "pooling"          # no_pool=0, pool=2 (always 2 when pooling right)
+    ]
     output_features = ["WorstLatency_hls", "IntervalMax_hls", "FF_hls", "LUT_hls", "BRAM_18K_hls", "DSP_hls", "hls_synth_success"]
     binary_feature_names = ['hls_synth_success']
     numeric_feature_names = ["d_in", "d_2", "d_out", "prec", "rf", "WorstLatency_hls", "IntervalMax_hls", "FF_hls", "LUT_hls",
                              "BRAM_18K_hls", "DSP_hls", "rf_times_precision"]
     categorical_feature_names = ["strategy"]
-    special_feature_names = ["model_string"] # what is this? 104-48-104-104 for a 3 layer model, 80-24-120 for a 2 layer model for example
+    special_feature_names = ["model_string"] # 8-128-2560-64-32-64 for the conv2d for example
 
     if needs_json_parsing:
         parse_file(input_folder)

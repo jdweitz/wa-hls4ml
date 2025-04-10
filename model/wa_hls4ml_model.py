@@ -12,11 +12,24 @@ import sys
 import math
 
 def load_model(model_dir):
-    model = torch.load(model_dir+"/model.pth")
+    # model = torch.load(model_dir+"/model.pth")
+    model = torch.load(model_dir+"/model.pth", weights_only=False) # need to add this bc of something in torch 2.6 I guess
     model.eval()
     model.load_state_dict(torch.load(model_dir+"/model_weights.pth", map_location=torch.device("cpu")))
 
     return model
+
+# # Attempt to overcome the torch.load error, see doc
+# def load_model(model_dir):
+#     # Allow the GraphNet class to be loaded from the checkpoint.
+#     from model.wa_hls4ml_model import GraphNet
+#     torch.serialization.add_safe_globals([GraphNet])
+    
+#     model = torch.load(model_dir + "/model.pth")
+#     model.eval()
+#     model.load_state_dict(torch.load(model_dir + "/model_weights.pth", map_location=torch.device("cpu")))
+    
+#     return model
 
 
 def save_model(model, model_dir):
