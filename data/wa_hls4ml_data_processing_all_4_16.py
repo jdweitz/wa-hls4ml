@@ -29,8 +29,8 @@ def preprocess_data_from_csv(model_folder, csv_file, input_features, output_feat
     ''' Extract data from a CSV, and preprocess that data '''
 
     # Step 1: Read the CSV file
-    # df = pd.read_csv(csv_file)
-    df = pd.read_csv(csv_file, nrows = 1000) # REMOVE nrows = 1000 after adjustments
+    df = pd.read_csv(csv_file)
+    # df = pd.read_csv(csv_file, nrows = 1000) # REMOVE nrows = 1000 after adjustments
     df.fillna(-1)
     preprocessed_data = []
     processing_input = True
