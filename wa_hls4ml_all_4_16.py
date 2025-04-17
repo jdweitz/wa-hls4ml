@@ -1,0 +1,189 @@
+import argparse
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+
+import matplotlib.pyplot as plt
+import torch
+import torch.utils
+import torch.utils.data
+
+from data.wa_hls4ml_plotly import plot_results
+from model.wa_hls4ml_dense_and_conv_model import save_model, load_model
+from model.wa_hls4ml_train_dense_and_conv import train_classifier, train_regressor
+from model.wa_hls4ml_test_dense_and_conv import calculate_metrics, display_results_classifier,display_results_regressor, test_regression_classification_union
+# from data.wa_hls4ml_data_processing_conv2d import preprocess_data
+from data.wa_hls4ml_data_processing_all_4_16 import preprocess_data
+
+
+def perform_train_and_test(train, test, regression, classification, skip_intermediates, is_graph, folder_name = "model_1", input_file = "../results/results_combined.csv", needs_json_parsing = False, doing_train_test_split = True, dev="cpu"):
+
+    features_without_classification = ["WorstLatency_hls", "IntervalMax_hls", "FF_hls", "LUT_hls", "BRAM_18K_hls", "DSP_hls"]
+    feature_classification_task = ["hls_synth_success"]
+
+    if test and not train:
+        # in this case, we have stored files for the mean and stdev of all our numeric features
+        mean = np.load(folder_name + "/mean.npy")
+        stdev = np.load(folder_name + "/stdev.npy")
+    else:
+        mean = None
+        stdev = None
+
+    # get raw data out
+    X_train, X_test, y_train, y_test, X_raw_train, X_raw_test = preprocess_data(folder_name, is_graph, input_file, needs_json_parsing = needs_json_parsing, mean=mean, stdev=stdev, doing_train_test_split = doing_train_test_split, dev = dev)
+
+    # # only first 1000 samples for now 
+    # sample_num = 1000
+    # X_train     = X_train[:sample_num]
+    # y_train     = y_train[:sample_num]
+    # X_raw_train = X_raw_train[:sample_num]
+
+    # X_test      = X_test[:sample_num]
+    # y_test      = y_test[:sample_num]
+    # X_raw_test  = X_raw_test[:sample_num]
+    # # samples above
+
+    print("X_raw_test shape:", np.asarray(X_raw_test).shape) # check the shape
+
+    # get just the classification task as its own variable
+    y_train_classifier = y_train[:, -1]
+    y_test_classifier = y_test[:, -1]
+
+    # train the classifier
+    if train and classification:
+        print("Training the classifier...")
+        train_classifier(X_train, y_train_classifier, folder_name, is_graph, dev)
+    if test and classification and not skip_display_intermediate:
+        display_results_classifier(X_test, X_raw_test, y_test_classifier, feature_classification_task, folder_name, is_graph)
+
+    # This is all we do if we are doing classification alone
+    if not regression:
+        return
+
+    # find which synth has succeeded in groundtruth
+    succeeded_synth_gt_test = np.nonzero(y_test_classifier)
+    succeeded_synth_gt_train = np.nonzero(y_train_classifier)
+
+    # only train regressor on successes
+    if is_graph:
+        X_succeeded_train = []
+        X_raw_succeeded_train = []
+        for i in succeeded_synth_gt_train[0]:
+            X_succeeded_train.append(X_train[i])
+            X_raw_succeeded_train.append(X_raw_train[i])
+    else:
+        X_succeeded_train = X_train[succeeded_synth_gt_train]
+        X_raw_succeeded_train = X_raw_train[succeeded_synth_gt_train]
+    y_succeeded_train = (y_train[succeeded_synth_gt_train])[:, :-1]
+
+    # only test regressor alone on successes
+    if is_graph:
+        X_succeeded_test = []
+        X_raw_succeeded_test = []
+        for i in succeeded_synth_gt_test[0]:
+            X_succeeded_test.append(X_test[i])
+            X_raw_succeeded_test.append(X_raw_test[i])
+    else:
+        X_succeeded_test = X_test[succeeded_synth_gt_test]
+        X_raw_succeeded_test = X_raw_test[succeeded_synth_gt_test]
+    y_succeeded_test = (y_test[succeeded_synth_gt_test])[:, :-1]
+
+    # train the regressor
+    if train and regression:
+        print("Training the regressor...")
+        train_regressor(X_succeeded_train, y_succeeded_train, features_without_classification, folder_name, is_graph, dev)
+    if test and regression and not skip_intermediates:
+        display_results_regressor(X_succeeded_test, X_raw_succeeded_test, y_succeeded_test, features_without_classification, folder_name, is_graph)
+
+    # if we are not doing both regression and classification, we are done
+    if not regression or not classification or not test:
+        return
+    
+    print("Testing the models in union...")
+    test_regression_classification_union(X_test, X_raw_test, y_test, features_without_classification, feature_classification_task, folder_name, is_graph)
+
+
+
+if __name__ == "__main__":
+
+    parser = argparse.ArgumentParser(prog='wa-hls4ml', description='Train or test model for wa-hls4ml', add_help=True)
+
+    parser.add_argument('--gpu', action='store_true', help='Use CUDA GPU processing for training')
+    
+    # parser.add_argument('--no-tts', action='store_true', help='Disable the automatic train-test split. Use only if using separate training and testing sets.', required=True) # how can i do this if its required to be true?
+    parser.add_argument('--no-tts', action='store_true', help='Disable the automatic train-test split. Use only if using separate training and testing sets.') # removed the requirement
+
+
+    parser.add_argument('--json', action='store_true', help='Parse JSON file as the input. If not given, assume that the input is a pre-parsed CSV')
+
+    parser.add_argument('--train', action='store_true', help='Train a new surrogate model from the data')
+    parser.add_argument('--test', action='store_true', help='Test existing models')
+
+    parser.add_argument('-c', '--classification', action='store_true', help='Train/test the classifier')
+    parser.add_argument('-r','--regression', action='store_true', help='Train/test the regressor')
+
+    parser.add_argument('-g','--gnn', action='store_true', help='Use a graph neural network to model the layers of the ml model')
+
+    parser.add_argument('-i', '--input', action='store', help="What file to use for input data")
+
+    parser.add_argument('-f', '--folder', action='store', help='Set the folder you want the model outputs to be created within', required=True)
+
+    
+    args = parser.parse_args()
+    args_dict = vars(args)
+
+    train = args_dict['train']
+    test = args_dict['test']
+
+    # if neither flag is assigned, assume both
+    if not train and not test:
+        train = True
+        test = True
+
+    # no_tts = args_dict['no-tts']
+    no_tts = args_dict['no_tts'] # needs to be an underscore for some reason
+
+    if train and test and no_tts:
+        raise ValueError('Train and test cannot both be selected if the train-test split is disabled - one or the other flag must be set alone.')
+
+    classification = args_dict['classification']
+    regression= args_dict['regression']
+
+    skip_display_intermediate = False
+
+    # if neither flag is assigned, assume both, but that we do not care about the intermediate classification/regression results
+    if not classification and not regression:
+        classification = True
+        regression = True
+        skip_display_intermediate = True
+
+    # whether or not to use the GNN
+    is_graph = args_dict['gnn']
+
+    # folder to store all the outputs into
+    folder = args_dict['folder']
+
+    # redirect the input into a models folder
+    folder = 'models/'+folder
+
+    input_file = args_dict['input']
+    needs_json_parsing = args_dict['json']
+    is_gpu = args_dict['gpu']
+
+    # allow using CUDA
+    if is_gpu:
+        dev = "cuda"
+    else:
+        dev = "cpu"
+
+    # perform the testing and training depending on arguments
+    print("Beginning...")
+    perform_train_and_test(train, test, regression, classification, skip_display_intermediate, is_graph, folder, input_file, needs_json_parsing, not no_tts, dev)
+    print("Done")
+    
+
+
+
+    
