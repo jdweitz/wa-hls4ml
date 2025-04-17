@@ -89,6 +89,7 @@ oauthlib==3.2.2
 opt_einsum==3.4.0
 optree==0.14.1
 optuna==4.2.1
+orjson==3.10.16
 packaging @ file:///home/conda/feedstock_root/build_artifacts/packaging_1733203243479/work
 pandas==2.2.3
 parse==1.6.5
