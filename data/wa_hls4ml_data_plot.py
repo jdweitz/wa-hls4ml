@@ -3,6 +3,8 @@ from matplotlib.lines import Line2D
 import numpy as np
 import os
 
+import pandas as pd # added for estimate plotting
+
 def plot_loss(name, history, folder_name):
     ''' plot losses during training of a model '''
 
@@ -186,3 +188,67 @@ def plot_box_plots(y_pred, y_test, folder_name):
     plt.savefig(directory+'_box.pdf')
 
     plt.close()
+
+    # added the below for: "the same box plots, but targeting the HLS estimates vs the actual resources"
+
+def plot_hls_estimate_box_plots(csv_file, folder_name):
+    import pandas as pd
+    import numpy as np
+    import matplotlib.pyplot as plt
+    import os
+
+    df = pd.read_csv(csv_file)
+    eps = 1e-9  # tiny to avoid div0, but drop exact zeros
+
+    est_cols = [c for c in df.columns if c.endswith("_est")]
+    errors = []
+    labels = []
+
+    for est in est_cols:
+        actual = est[:-4]  # strip off "_est"
+        if actual not in df.columns:
+            continue
+
+        # only keep rows where actual > 0
+        mask = df[actual] > 0
+        if mask.sum() == 0:
+            continue
+
+        err = (df.loc[mask, est] - df.loc[mask, actual]) / df.loc[mask, actual] * 100
+        errors.append(err.values)
+        labels.append(actual)
+
+    if not errors:
+        print("No valid resource pairs found.")
+        return
+
+    plt.rcParams.update({"font.size": 14})
+    fig, ax = plt.subplots(figsize=(len(labels)*2, 6))
+    bplot = ax.boxplot(errors,
+                       labels=labels,
+                       whis=1.5,
+                       showmeans=True,
+                       meanline=True,
+                       patch_artist=True)
+
+    # color boxes
+    colors = plt.cm.Set3.colors
+    for patch, color in zip(bplot["boxes"], colors):
+        patch.set_facecolor(color)
+
+    ax.set_title("HLS Estimate vs Actual Resources\nRelative % Error (actual > 0)")
+    ax.set_ylabel("Relative Percent Error")
+    ax.set_xlabel("Resource Type")
+    ax.yaxis.grid(True, linestyle="--", alpha=0.7)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+
+    outdir = os.path.join(folder_name, "plots", "hls_estimate_boxplots")
+    os.makedirs(outdir, exist_ok=True)
+    fig.savefig(
+        os.path.join(outdir, "hls_estimate_vs_actual_boxplots.png"),
+        bbox_inches="tight",
+        dpi=300,
+    )
+    plt.close(fig)
+    print("Saved HLS vs actual boxplots to", outdir)

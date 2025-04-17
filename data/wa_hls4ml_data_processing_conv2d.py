@@ -6,8 +6,8 @@ import sklearn.model_selection
 import torch_geometric as pyg
 from torch_geometric.data import Data
         
-# from data.wa_hls4ml_json_to_csv import parse_file
-from wa_hls4ml_json_to_csv import parse_file # use this one to preprocess by itself
+from data.wa_hls4ml_json_to_csv import parse_file
+# from wa_hls4ml_json_to_csv import parse_file # use this one to preprocess by itself
 
 import os
 import sys
@@ -199,81 +199,133 @@ def create_graph_tensor(input_values, input_raw_values, input_json, mean, stdev,
 # - note always doing pooling=2 when its a pooling layer
 # - can use zero-padding so if feature is undefined for a particular layer, just set it to 0
 
-def preprocess_data(model_folder, is_graph = False, input_folder="../results/results_combined.csv", needs_json_parsing = False, is_already_serialized = False, mean = None, stdev = None, doing_train_test_split = True, dev = "cpu"):
-    ''' Preprocess the data '''
+def preprocess_data(model_folder,
+                    is_graph=False,
+                    input_folder="../results/results_combined.csv",
+                    needs_json_parsing=False,
+                    is_already_serialized=False,
+                    mean=None,
+                    stdev=None,
+                    doing_train_test_split=True,
+                    dev="cpu"):
+    ''' Preprocess the data, auto detecting Dense vs Conv2D CSV. '''
 
-    # input_features = ["d_in", "d_out", "prec", "rf", "strategy", "rf_times_precision"] # commented
-    # columns expected in the CSV now
-    input_features = [
-        "d_in1", "d_in2", "d_in3",
-        "d_out1", "d_out2", "d_out3",
-        "prec", "rf", "strategy", "rf_times_precision",
-        "layer_type",      # dense=0, conv1d=1, conv2d=2, separableconv1d=3, separableconv2d=4, depthwiseconv1d=5, depthwiseconv2d=6, flatten=7, maxpooling=8, averagepooling=9
-        "activation_type", # noact=0, relu=1 ,tanh=2, sigmoid=3, softmax=4
-        "filters",         # for conv layers
-        "kernel_size",     # like 3,5,7
-        "stride",          # like 1,2
-        "padding",         # same=0, valid=1
-        "pooling"          # no_pool=0, pool=2 (always 2 when pooling right)
+    # 1) Read the CSV once up front to inspect its columns
+    df = pd.read_csv(input_folder)
+    cols = set(df.columns)
+
+    # 2) Shared outputs (same for Dense & Conv2D)
+    shared_output_features = [
+        "TargetClockPeriod_hls",
+        "EstimatedClockPeriod_hls",
+        "BestLatency_hls",
+        "WorstLatency_hls",
+        "IntervalMin_hls",
+        "IntervalMax_hls",
+        "BRAM_18K_hls",
+        "DSP_hls",
+        "FF_hls",
+        "LUT_hls",
+        "URAM_hls",
+        "hls_synth_success"
     ]
-    output_features = ["WorstLatency_hls", "IntervalMax_hls", "FF_hls", "LUT_hls", "BRAM_18K_hls", "DSP_hls", "hls_synth_success"]
-    binary_feature_names = ['hls_synth_success']
-    numeric_feature_names = ["d_in", "d_2", "d_out", "prec", "rf", "WorstLatency_hls", "IntervalMax_hls", "FF_hls", "LUT_hls",
-                             "BRAM_18K_hls", "DSP_hls", "rf_times_precision"]
-    categorical_feature_names = ["strategy"]
-    special_feature_names = ["model_string"] # 8-128-2560-64-32-64 for the conv2d for example
+    # binary outputs
+    shared_binary = ["hls_synth_success"]
+    # numeric outputs = all except the binary
+    shared_output_numeric = [f for f in shared_output_features if f not in shared_binary]
 
+    # 3) Dense schema
+    dense_input_features = ["d_in", "d_out", "prec", "rf", "strategy", "rf_times_precision"]
+    dense_numeric_input   = ["d_in", "d_out", "prec", "rf", "rf_times_precision"]
+    dense_categorical     = ["strategy"]
+    dense_special         = ["model_string", "model_file"]
+
+    # 4) Conv2D schema
+    conv_input_features = [
+        "d_in1","d_in2","d_in3",
+        "d_out1","d_out2","d_out3",
+        "prec","rf","strategy","rf_times_precision",
+        "layer_type","activation_type","filters",
+        "kernel_size","stride","padding","pooling"
+    ]
+    conv_numeric_input = [
+        "d_in1","d_in2","d_in3",
+        "d_out1","d_out2","d_out3",
+        "prec","rf","rf_times_precision",
+        "layer_type","activation_type","filters",
+        "kernel_size","stride","padding","pooling"
+    ]
+    conv_categorical = ["strategy"]
+    conv_special     = ["model_string", "model_file"]
+
+    # 5) Pick schema based on column presence
+    if "d_in1" in cols:
+        input_features       = conv_input_features
+        output_features      = shared_output_features
+        binary_feature_names = shared_binary
+        numeric_feature_names = conv_numeric_input + shared_output_numeric
+        categorical_feature_names = conv_categorical
+        special_feature_names = conv_special
+        print("Detected Conv2D CSV schema.")
+    else:
+        input_features       = dense_input_features
+        output_features      = shared_output_features
+        binary_feature_names = shared_binary
+        numeric_feature_names = dense_numeric_input + shared_output_numeric
+        categorical_feature_names = dense_categorical
+        special_feature_names = dense_special
+        print("Detected Dense CSV schema.")
+
+    # 6) (Optional) JSON parsing step
     if needs_json_parsing:
         parse_file(input_folder)
         input_folder = 'auto_parsed_json.csv'
 
-    _X, y, X_raw, special_data = preprocess_data_from_csv(model_folder, input_folder, input_features, output_features,
-                             binary_feature_names, numeric_feature_names,
-                             categorical_feature_names, special_feature_names, presaved_mean=mean, presaved_stdev=stdev)
+    # 7) Run the common CSV→tensor pipeline
+    X_norm, y, X_raw, special_data = preprocess_data_from_csv(
+        model_folder,
+        input_folder,
+        input_features,
+        output_features,
+        binary_feature_names,
+        numeric_feature_names,
+        categorical_feature_names,
+        special_feature_names,
+        presaved_mean=mean,
+        presaved_stdev=stdev
+    )
 
-    # load in the preprocessed mean and stdev values
-    mean = np.load(model_folder + "/mean.npy")
-    stdev = np.load(model_folder + "/stdev.npy")
+    # 8) Load or compute mean/stdev
+    mean  = np.load(f"{model_folder}/mean.npy")
+    stdev = np.load(f"{model_folder}/stdev.npy")
 
-    if (is_graph and not is_already_serialized):
-        i = 0
-        graph_tensor_list = []
-
-        for datapoint in special_data:
-            # tensorize this data into the torch graph-based data format
-            graph_tensor = create_graph_tensor(_X[i], X_raw[i], datapoint[0], mean, stdev, dev)
-            graph_tensor_list.append(graph_tensor)
-            i += 1
-            if i % 5000 == 0:
-                print("Processing special feature " + str(i))
-
-        X = graph_tensor_list
+    # 9) Graph‐tensor option
+    if is_graph and not is_already_serialized:
+        graph_list = []
+        for i, spec in enumerate(special_data):
+            graph = create_graph_tensor(X_norm[i], X_raw[i], spec[0], mean, stdev, dev)
+            graph_list.append(graph)
+        X = graph_list
     else:
-        X = _X
-        print(X.shape, y.shape)
+        X = X_norm
+        print("X shape:", X.shape, "y shape:", y.shape)
 
-    # Split the data 70 - 20 - 10 train test val
-    # Train and test
-    print("X Data: ",input_features)
-    print("Y Data: ",output_features)
-
+    # 10) Train/test split
     if doing_train_test_split:
-        X_train, X_test, y_train, y_test, X_raw_train, X_raw_test = sklearn.model_selection.train_test_split(X, y, X_raw,  test_size=0.2, random_state=42, shuffle=True)
+        X_train, X_test, y_train, y_test, X_raw_train, X_raw_test = \
+            sklearn.model_selection.train_test_split(
+                X, y, X_raw, test_size=0.2, random_state=42, shuffle=True)
     else:
-        # in this case, the user is responsible for the splitting
-        X_train = X
-        X_test = X
-        y_train = y
-        y_test = y
-        X_raw_train = X_raw
-        X_raw_test = X_raw
+        X_train, X_test = X, X
+        y_train, y_test = y, y
+        X_raw_train, X_raw_test = X_raw, X_raw
 
     return X_train, X_test, y_train, y_test, X_raw_train, X_raw_test
 
 # Added the below to preprocess
 if __name__ == '__main__':
     model_folder = "conv2d_model_folder"  # model folder
-    csv_file = "concatenated_conv2d_json_to_csv.csv"      # csv path
+    csv_file = "conv2d_combined_dense_format.csv"      # csv path
     # needs_json_parsing to false, already a csv
     X_train, X_test, y_train, y_test, X_raw_train, X_raw_test = preprocess_data(
         model_folder=model_folder,
