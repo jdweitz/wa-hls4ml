@@ -15,16 +15,23 @@ from model.wa_hls4ml_dense_and_conv_model import save_model, load_model
 from model.wa_hls4ml_train_dense_and_conv import train_classifier, train_regressor
 from model.wa_hls4ml_test_dense_and_conv import calculate_metrics, display_results_classifier,display_results_regressor, test_regression_classification_union
 # from data.wa_hls4ml_data_processing_conv2d import preprocess_data
-from data.wa_hls4ml_data_processing_all_4_16 import preprocess_data
+from data.wa_hls4ml_data_processing_all_4_18_TEST import preprocess_data
 
 # define the device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # def perform_train_and_test(train, test, regression, classification, skip_intermediates, is_graph, folder_name = "model_1", input_file = "../results/results_combined.csv", needs_json_parsing = False, doing_train_test_split = True, dev="cpu"):
 
-def perform_train_and_test(train, test, regression, classification, skip_intermediates, is_graph, folder_name = "model_1", input_file = "../results/results_combined.csv", needs_json_parsing = False, doing_train_test_split = True, dev = device):
+def perform_train_and_test(train, test, regression, classification, skip_intermediates, is_graph, folder_name = "model_1", input_file = "../results/results_combined.csv", needs_json_parsing = False, doing_train_test_split = True, dev = device, single_feature=None):
 
     features_without_classification = ["WorstLatency_hls", "IntervalMax_hls", "FF_hls", "LUT_hls", "BRAM_18K_hls", "DSP_hls"]
+
+    # if the user requested just one feature, filter down:
+    if single_feature is not None:
+        if single_feature not in features_without_classification:
+            raise ValueError(f"--feature={single_feature} is not a valid target")
+        features_without_classification = [single_feature]
+
     feature_classification_task = ["hls_synth_success"]
 
     if test and not train:
@@ -94,6 +101,21 @@ def perform_train_and_test(train, test, regression, classification, skip_interme
         X_raw_succeeded_test = X_raw_test[succeeded_synth_gt_test]
     y_succeeded_test = (y_test[succeeded_synth_gt_test])[:, :-1]
 
+    # if we're only doing a single feature, pick out its column
+    if single_feature is not None:
+        idx_map = {
+        "WorstLatency_hls": 0,
+        "IntervalMax_hls": 1,
+        "FF_hls": 2,
+        "LUT_hls": 3,
+        "BRAM_18K_hls": 4,
+        "DSP_hls": 5
+        }
+        idx = idx_map[single_feature]
+        # keep it as a 2D array with shape (N,1)
+        y_succeeded_train = y_succeeded_train[:, [idx]]
+        y_succeeded_test  = y_succeeded_test [:, [idx]]
+
     # train the regressor
     if train and regression:
         print("Training the regressor...")
@@ -115,8 +137,17 @@ def perform_train_and_test(train, test, regression, classification, skip_interme
     if not regression or not classification or not test:
         return
     
-    print("Testing the models in union...")
-    test_regression_classification_union(X_test, X_raw_test, y_test, features_without_classification, feature_classification_task, folder_name, is_graph)
+    # print("Testing the models in union...")
+    # test_regression_classification_union(X_test, X_raw_test, y_test, features_without_classification, feature_classification_task, folder_name, is_graph)
+
+    # only do the union step if we're training/testing *all* features
+    if single_feature is None:
+        print("Testing the models in union...")
+        test_regression_classification_union(
+            X_test, X_raw_test, y_test,
+            features_without_classification,
+            feature_classification_task,
+            folder_name, is_graph)
 
 
 
@@ -144,7 +175,18 @@ if __name__ == "__main__":
 
     parser.add_argument('-f', '--folder', action='store', help='Set the folder you want the model outputs to be created within', required=True)
 
-    
+    parser.add_argument(
+        '--feature',
+        choices=[
+          "WorstLatency_hls",
+          "IntervalMax_hls",
+          "FF_hls",
+          "LUT_hls",
+          "BRAM_18K_hls",
+          "DSP_hls"
+        ],
+   )
+
     args = parser.parse_args()
     args_dict = vars(args)
 
@@ -186,6 +228,8 @@ if __name__ == "__main__":
     needs_json_parsing = args_dict['json']
     is_gpu = args_dict['gpu']
 
+    single_feature = args_dict['feature'] # added to run just one
+
     # allow using CUDA
     if is_gpu:
         dev = "cuda"
@@ -194,10 +238,7 @@ if __name__ == "__main__":
 
     # perform the testing and training depending on arguments
     print("Beginning...")
-    perform_train_and_test(train, test, regression, classification, skip_display_intermediate, is_graph, folder, input_file, needs_json_parsing, not no_tts, dev)
+    # perform_train_and_test(train, test, regression, classification, skip_display_intermediate, is_graph, folder, input_file, needs_json_parsing, not no_tts, dev)
+    perform_train_and_test(train, test, regression, classification, skip_display_intermediate, is_graph, folder, input_file, needs_json_parsing, not no_tts, dev, single_feature=single_feature)
     print("Done")
-    
-
-
-
-    
+        

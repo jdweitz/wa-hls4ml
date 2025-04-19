@@ -11,13 +11,41 @@ import os
 import sys
 import math
 
-def load_model(model_dir):
-    # model = torch.load(model_dir+"/model.pth")
-    model = torch.load(model_dir+"/model.pth", weights_only=False) # need to add this bc of something in torch 2.6 I guess
+# ADDED to attempt to fix device issue
+def load_model(model_dir, device=None):
+    # pick device
+    if device is None:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    # load checkpoint onto that device
+    model = torch.load(
+        f"{model_dir}/model.pth",
+        map_location=device,
+        weights_only=False
+    )
+
+    # load the state dict also onto the same device
+    state_dict = torch.load(
+        f"{model_dir}/model_weights.pth",
+        map_location=device
+    )
+    model.load_state_dict(state_dict)
+
+    # move model to device before calling eval()
+    model.to(device)
     model.eval()
-    model.load_state_dict(torch.load(model_dir+"/model_weights.pth", map_location=torch.device("cpu")))
 
     return model
+# need to also check that inputs are sent to the same device
+
+# COMMENTED 4/18 due to device issue
+# def load_model(model_dir):
+#     # model = torch.load(model_dir+"/model.pth")
+#     model = torch.load(model_dir+"/model.pth", weights_only=False) # need to add this bc of something in torch 2.6 I guess
+#     model.eval()
+#     model.load_state_dict(torch.load(model_dir+"/model_weights.pth", map_location=torch.device("cpu")))
+
+#     return model
 
 # # Attempt to overcome the torch.load error, see doc
 # def load_model(model_dir):

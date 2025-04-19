@@ -230,10 +230,10 @@ def train_classifier(X_train, y_train, folder_name, is_graph, dev = "cpu"):
     loss_function = torch.nn.BCELoss()
     
     test_size = .125
-    batch = 512
-    # batch = 2
-    epochs = 250
-    # epochs = 1
+    # batch = 512
+    batch = 256
+    # epochs = 250
+    epochs = 1
 
     learning_rate = 0.0001
     weight_decay = 0.001
@@ -257,10 +257,10 @@ def train_regressor(X_train, y_train, output_features, folder_name, is_graph, de
     input_dim = X_train.shape[1] if not is_graph else None
 
     test_size = .125
-    batch = 512
-    # batch = 2
-    epochs = 350
-    # epochs = 1
+    # batch = 512
+    batch = 256
+    # epochs = 350
+    epochs = 1
 
     learning_rate = 0.01
     weight_decay = 0.001
@@ -271,10 +271,10 @@ def train_regressor(X_train, y_train, output_features, folder_name, is_graph, de
     epsilon = 0.000001
 
     if is_graph:
-        epochs = 350
-        # epochs = 1
-        batch = 512
-        # batch = 2
+        # epochs = 350
+        epochs = 1
+        # batch = 512
+        batch = 256
         learning_rate = 0.001 
         patience = 10
         cooldown = 6

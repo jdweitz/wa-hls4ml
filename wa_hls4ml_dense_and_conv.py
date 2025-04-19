@@ -14,15 +14,10 @@ from data.wa_hls4ml_plotly import plot_results
 from model.wa_hls4ml_dense_and_conv_model import save_model, load_model
 from model.wa_hls4ml_train_dense_and_conv import train_classifier, train_regressor
 from model.wa_hls4ml_test_dense_and_conv import calculate_metrics, display_results_classifier,display_results_regressor, test_regression_classification_union
-# from data.wa_hls4ml_data_processing_conv2d import preprocess_data
-from data.wa_hls4ml_data_processing_all_4_16 import preprocess_data
+from data.wa_hls4ml_data_processing_conv2d import preprocess_data
 
-# define the device
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# def perform_train_and_test(train, test, regression, classification, skip_intermediates, is_graph, folder_name = "model_1", input_file = "../results/results_combined.csv", needs_json_parsing = False, doing_train_test_split = True, dev="cpu"):
-
-def perform_train_and_test(train, test, regression, classification, skip_intermediates, is_graph, folder_name = "model_1", input_file = "../results/results_combined.csv", needs_json_parsing = False, doing_train_test_split = True, dev = device):
+def perform_train_and_test(train, test, regression, classification, skip_intermediates, is_graph, folder_name = "model_1", input_file = "../results/results_combined.csv", needs_json_parsing = False, doing_train_test_split = True, dev="cpu"):
 
     features_without_classification = ["WorstLatency_hls", "IntervalMax_hls", "FF_hls", "LUT_hls", "BRAM_18K_hls", "DSP_hls"]
     feature_classification_task = ["hls_synth_success"]
@@ -37,17 +32,6 @@ def perform_train_and_test(train, test, regression, classification, skip_interme
 
     # get raw data out
     X_train, X_test, y_train, y_test, X_raw_train, X_raw_test = preprocess_data(folder_name, is_graph, input_file, needs_json_parsing = needs_json_parsing, mean=mean, stdev=stdev, doing_train_test_split = doing_train_test_split, dev = dev)
-
-    # # only first 1000 samples for now 
-    # sample_num = 1000
-    # X_train     = X_train[:sample_num]
-    # y_train     = y_train[:sample_num]
-    # X_raw_train = X_raw_train[:sample_num]
-
-    # X_test      = X_test[:sample_num]
-    # y_test      = y_test[:sample_num]
-    # X_raw_test  = X_raw_test[:sample_num]
-    # # samples above
 
     print("X_raw_test shape:", np.asarray(X_raw_test).shape) # check the shape
 
@@ -99,17 +83,7 @@ def perform_train_and_test(train, test, regression, classification, skip_interme
         print("Training the regressor...")
         train_regressor(X_succeeded_train, y_succeeded_train, features_without_classification, folder_name, is_graph, dev)
     if test and regression and not skip_intermediates:
-    #     display_results_regressor(X_succeeded_test, X_raw_succeeded_test, y_succeeded_test, features_without_classification, folder_name, is_graph)
-
-        display_results_regressor(
-            X_succeeded_test,
-            X_raw_succeeded_test,
-            y_succeeded_test,
-            features_without_classification,
-            folder_name,
-            is_graph,
-            device
-        )
+        display_results_regressor(X_succeeded_test, X_raw_succeeded_test, y_succeeded_test, features_without_classification, folder_name, is_graph)
 
     # if we are not doing both regression and classification, we are done
     if not regression or not classification or not test:

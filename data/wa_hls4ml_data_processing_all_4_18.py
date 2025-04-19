@@ -6,12 +6,21 @@ import sklearn.model_selection
 import torch_geometric as pyg
 from torch_geometric.data import Data
         
-from data.wa_hls4ml_json_to_csv import parse_file
+# from data.wa_hls4ml_json_to_csv import parse_file
 # from wa_hls4ml_json_to_csv import parse_file # use this one to preprocess by itself
+
+# should be the other parse file so that it parses the other features (but won't need parsing bc already did it)
+
+# from wa_hls4ml_json_to_one_csv_all_4_18 import parse_file # for just running this file
+from data.wa_hls4ml_json_to_one_csv_all_4_18 import parse_file # for running wa_hls4ml.py
 
 import os
 import sys
 import math
+
+# show all rows and columns
+pd.set_option('display.max_rows', None)
+pd.set_option('display.max_columns', None)
 
 # current I/O:
 #   inputs: d_in, d_2,	d_out, prec, rf, strategy
@@ -22,6 +31,7 @@ def preprocess_data_from_csv(model_folder, csv_file, input_features, output_feat
 
     # Step 1: Read the CSV file
     df = pd.read_csv(csv_file)
+    # df = pd.read_csv(csv_file, nrows = 1000) # REMOVE nrows = 1000 after adjustments
     df.fillna(-1)
     preprocessed_data = []
     processing_input = True
@@ -159,20 +169,38 @@ def create_graph_tensor(input_values, input_raw_values, input_json, mean, stdev,
 
     bops_features = np.empty(nodes_count.shape)
 
+    # for i in range(nodes_count.shape[0]):
+    #     curr_nodes = raw_nodes_count[i]
+    #     if i+1 == nodes_count.shape[0]:
+    #         next_nodes = 1
+    #     else:
+    #         next_nodes = raw_nodes_count[i+1]
+        
+    #     p = input_raw_values[3]
+        
+    #     bops = curr_nodes * next_nodes * ( p**2 + 2 * p + math.log2(curr_nodes) ) # this blows up bc of the zeros now
+
+    #     # arrange these to the same or similar order of magnitude as other values
+    #     bops = math.sqrt(bops)/1000
+    
+    #     bops_features[i] = bops
+
     for i in range(nodes_count.shape[0]):
         curr_nodes = raw_nodes_count[i]
         if i+1 == nodes_count.shape[0]:
             next_nodes = 1
         else:
             next_nodes = raw_nodes_count[i+1]
-        
-        p = input_raw_values[3]
-        
-        bops = curr_nodes * next_nodes * ( p**2 + 2 * p + math.log2(curr_nodes) )
 
-        # arrange these to the same or similar order of magnitude as other values
-        bops = math.sqrt(bops)/1000
-    
+        # avoid log2(0):
+        if curr_nodes <= 0:
+            bops = 0.0
+        else:
+            p = input_raw_values[3]
+            bops = curr_nodes * next_nodes * (p**2 + 2*p + math.log2(curr_nodes))
+
+        # scale
+        bops = math.sqrt(bops) / 1000
         bops_features[i] = bops
 
     bops_features = bops_features.astype('float32')
@@ -199,122 +227,108 @@ def create_graph_tensor(input_values, input_raw_values, input_json, mean, stdev,
 # - note always doing pooling=2 when its a pooling layer
 # - can use zero-padding so if feature is undefined for a particular layer, just set it to 0
 
-def preprocess_data(model_folder,
-                    is_graph=False,
-                    input_folder="../results/results_combined.csv",
-                    needs_json_parsing=False,
-                    is_already_serialized=False,
-                    mean=None,
-                    stdev=None,
-                    doing_train_test_split=True,
-                    dev="cpu"):
-    ''' Preprocess the data, auto detecting Dense vs Conv2D CSV. '''
+def preprocess_data(
+    model_folder,
+    is_graph=False,
+    input_folder="../results/results_combined.csv",
+    needs_json_parsing=False,
+    is_already_serialized=False,
+    mean=None,
+    stdev=None,
+    doing_train_test_split=True,
+    dev="cpu"
+):
+    ''' Preprocess the data, using a unified conv schema for Dense, Conv1D, Conv2D. '''
 
     # 1) Read the CSV once up front to inspect its columns
     df = pd.read_csv(input_folder)
+
+    # 1a) Derive a simple “type” label for stratification
+    def get_model_type(name):
+        if "2layer" in name:   return "2layer"
+        elif "3layer" in name: return "3layer"
+        elif "conv1d" in name: return "conv1d"
+        elif "conv2d" in name: return "conv2d"
+        else:                  return "manylayer"
+    df["type"] = df["model_name"].apply(get_model_type)
+
     cols = set(df.columns)
 
-    # 2) Shared outputs (same for Dense & Conv2D)
+    # 2) Shared outputs (same for all)
     shared_output_features = [
-        "TargetClockPeriod_hls",
-        "EstimatedClockPeriod_hls",
-        "BestLatency_hls",
-        "WorstLatency_hls",
-        "IntervalMin_hls",
-        "IntervalMax_hls",
-        "BRAM_18K_hls",
-        "DSP_hls",
-        "FF_hls",
-        "LUT_hls",
-        "URAM_hls",
-        "hls_synth_success"
+        "TargetClockPeriod_hls","EstimatedClockPeriod_hls",
+        "BestLatency_hls","WorstLatency_hls",
+        "IntervalMin_hls","IntervalMax_hls",
+        "BRAM_18K_hls","DSP_hls","FF_hls",
+        "LUT_hls","URAM_hls","hls_synth_success"
     ]
-    # binary outputs
-    shared_binary = ["hls_synth_success"]
-    # numeric outputs = all except the binary
-    shared_output_numeric = [f for f in shared_output_features if f not in shared_binary]
+    shared_binary  = ["hls_synth_success"]
+    shared_numeric = [f for f in shared_output_features if f not in shared_binary]
 
-    # 3) Dense schema
-    dense_input_features = ["d_in", "d_out", "prec", "rf", "strategy", "rf_times_precision"]
-    dense_numeric_input   = ["d_in", "d_out", "prec", "rf", "rf_times_precision"]
-    dense_categorical     = ["strategy"]
-    dense_special         = ["model_string", "model_file"]
-
-    # 4) Conv2D schema
-    conv_input_features = [
+    # 3) Unified “conv” schema (zero-padded for anything that isn’t a full Conv2D)
+    input_features = [
         "d_in1","d_in2","d_in3",
         "d_out1","d_out2","d_out3",
         "prec","rf","strategy","rf_times_precision",
         "layer_type","activation_type","filters",
         "kernel_size","stride","padding","pooling"
     ]
-    conv_numeric_input = [
+    numeric_inputs = [
         "d_in1","d_in2","d_in3",
         "d_out1","d_out2","d_out3",
         "prec","rf","rf_times_precision",
         "layer_type","activation_type","filters",
         "kernel_size","stride","padding","pooling"
     ]
-    conv_categorical = ["strategy"]
-    conv_special     = ["model_string", "model_file"]
+    categorical_inputs = ["strategy"]
+    special_features   = ["model_string","model_file"]
 
-    # 5) Pick schema based on column presence
-    if "d_in1" in cols:
-        input_features       = conv_input_features
-        output_features      = shared_output_features
-        binary_feature_names = shared_binary
-        numeric_feature_names = conv_numeric_input + shared_output_numeric
-        categorical_feature_names = conv_categorical
-        special_feature_names = conv_special
-        print("Detected Conv2D CSV schema.")
-    else:
-        input_features       = dense_input_features
-        output_features      = shared_output_features
-        binary_feature_names = shared_binary
-        numeric_feature_names = dense_numeric_input + shared_output_numeric
-        categorical_feature_names = dense_categorical
-        special_feature_names = dense_special
-        print("Detected Dense CSV schema.")
+    print("Using unified Conv schema for all_models.csv")
 
-    # 6) (Optional) JSON parsing step
+    # 4) (Optional) JSON parsing step
     if needs_json_parsing:
         parse_file(input_folder)
         input_folder = 'auto_parsed_json.csv'
 
-    # 7) Run the common CSV→tensor pipeline
+    # 5) Run the common CSV→tensor pipeline
     X_norm, y, X_raw, special_data = preprocess_data_from_csv(
         model_folder,
         input_folder,
         input_features,
-        output_features,
-        binary_feature_names,
-        numeric_feature_names,
-        categorical_feature_names,
-        special_feature_names,
+        shared_output_features,
+        shared_binary,
+        numeric_inputs + shared_numeric,
+        categorical_inputs,
+        special_features,
         presaved_mean=mean,
         presaved_stdev=stdev
     )
 
-    # 8) Load or compute mean/stdev
+    # 6) Load or compute mean/stdev
     mean  = np.load(f"{model_folder}/mean.npy")
     stdev = np.load(f"{model_folder}/stdev.npy")
 
-    # 9) Graph‐tensor option
+    # 7) Graph‐tensor option
     if is_graph and not is_already_serialized:
         graph_list = []
         for i, spec in enumerate(special_data):
-            graph = create_graph_tensor(X_norm[i], X_raw[i], spec[0], mean, stdev, dev)
+            graph = create_graph_tensor(
+                X_norm[i], X_raw[i], spec[0], mean, stdev, dev
+            )
             graph_list.append(graph)
         X = graph_list
     else:
         X = X_norm
         print("X shape:", X.shape, "y shape:", y.shape)
 
-    # 10) Train/test split
+    # 8) Train/test split
     if doing_train_test_split:
         X_train, X_test, y_train, y_test, X_raw_train, X_raw_test = \
             sklearn.model_selection.train_test_split(
-                X, y, X_raw, test_size=0.2, random_state=42, shuffle=True)
+                X, y, X_raw, test_size=0.2,
+                random_state=42, shuffle=True,
+                stratify=df["type"]     # added this to ensure proper split
+            )
     else:
         X_train, X_test = X, X
         y_train, y_test = y, y
@@ -324,8 +338,8 @@ def preprocess_data(model_folder,
 
 # Added the below to preprocess
 if __name__ == '__main__':
-    model_folder = "conv2d_model_folder"  # model folder
-    csv_file = "conv2d_combined_dense_format.csv"      # csv path
+    model_folder = "ALL_models_4_18"  # model folder
+    csv_file = "4_18_ALL_models_with_ii.csv"      # csv path
     # needs_json_parsing to false, already a csv
     X_train, X_test, y_train, y_test, X_raw_train, X_raw_test = preprocess_data(
         model_folder=model_folder,

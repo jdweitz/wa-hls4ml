@@ -11,6 +11,11 @@ from model.wa_hls4ml_dense_and_conv_model import load_model
 from data.wa_hls4ml_plotly import plot_results
 from data.wa_hls4ml_data_plot import plot_histograms, plot_box_plots, plot_hls_estimate_box_plots
 
+import matplotlib.pyplot as plt
+import os
+
+
+
 def calculate_metrics(y_test, y_pred):
     ''' Calculate out MAE, MSE, RMSE, and R^2 '''
 
@@ -44,6 +49,11 @@ def display_results_classifier(X_test, X_raw_test, y_test, output_features, fold
         else:
             y_pred = model(torch.tensor(X_test)).detach().numpy()
 
+    print("y_test NaNs?", np.isnan(y_test).any())
+    print("y_pred NaNs?", np.isnan(y_pred).any())
+    if np.isnan(y_pred).any():
+        print("First few NaN indices in y_pred:", np.argwhere(np.isnan(y_pred))[:10])
+        print("Their values:", y_pred[np.isnan(y_pred)])
     # Calculate metrics
     calculate_metrics(y_test, y_pred)
 
@@ -57,47 +67,107 @@ def display_results_classifier(X_test, X_raw_test, y_test, output_features, fold
     y_test_2d = np.reshape(y_test, (y_test.shape[0], 1))
     plot_results("classifier", False, y_test_2d, y_pred, X_raw_test, output_features, folder_name)
 
-def display_results_regressor(X_test, X_raw_test, y_test, output_features, folder_name, is_graph):
+# def display_results_regressor(X_test, X_raw_test, y_test, output_features, folder_name, is_graph):
+#     ''' Display the results of the regression models '''
+
+#     y_pred = np.empty(y_test.shape)
+
+#     i = 0
+#     for feature in output_features:
+        
+#         model = load_model(folder_name+'/regression_'+feature).to("cpu")
+#         model.switch_device("cpu")
+#         model.eval()
+
+#         with torch.no_grad():
+#             # Predict the output of this specific feature for X_test
+#             if is_graph:
+#                 X_loader = gloader.DataLoader(X_test, batch_size=len(X_test))
+#                 X = next(iter(X_loader))
+#                 y_pred_part = model(X).detach().numpy()                
+#             else:
+#                 y_pred_part = model(torch.tensor(X_test)).detach().numpy()
+
+#             print("Part " + feature + ": " + str(y_pred_part.shape))
+#             print(torch.mean(torch.nn.functional.l1_loss(torch.tensor(y_pred_part[:,0]), torch.tensor(y_test[:, i]))))
+
+
+
+#         # Consolidate feature predictions
+#         y_pred[:, i] = y_pred_part[:, 0]
+            
+#         i += 1
+
+#     # Calculate metrics
+#     calculate_metrics(y_test, y_pred)
+
+#     # plot our regression results
+#     plot_results("regression_all", False, y_test, y_pred, X_raw_test, output_features, folder_name)
+
+#     plot_box_plots(y_pred=y_pred, y_test=y_test, folder_name=folder_name)
+
+#     csv_file = "data/all_models_with_estimates.csv"
+#     plot_hls_estimate_box_plots(csv_file, folder_name)
+
+def display_results_regressor(X_test, X_raw_test, y_test,
+                              output_features, folder_name,
+                              is_graph, device): # so it all lives on the same device
     ''' Display the results of the regression models '''
 
     y_pred = np.empty(y_test.shape)
 
-    i = 0
-    for feature in output_features:
-        
-        model = load_model(folder_name+'/regression_'+feature).to("cpu")
-        model.switch_device("cpu")
+    for i, feature in enumerate(output_features):
+        # 1) load your model and send it to the right device
+        model = load_model(f"{folder_name}/regression_{feature}")
+        model = model.to(device)
         model.eval()
 
         with torch.no_grad():
-            # Predict the output of this specific feature for X_test
             if is_graph:
-                X_loader = gloader.DataLoader(X_test, batch_size=len(X_test))
-                X = next(iter(X_loader))
-                y_pred_part = model(X).detach().numpy()                
+                # build one big batch, then .to(device)
+                loader = gloader.DataLoader(X_test, batch_size=len(X_test))
+                batch = next(iter(loader)).to(device)
+                out = model(batch)
+
             else:
-                y_pred_part = model(torch.tensor(X_test)).detach().numpy()
+                # turn your numpy array into a tensor on `device`
+                inputs = torch.tensor(X_test, dtype=torch.float32, device=device)
+                out = model(inputs)
 
-            print("Part " + feature + ": " + str(y_pred_part.shape))
-            print(torch.mean(torch.nn.functional.l1_loss(torch.tensor(y_pred_part[:,0]), torch.tensor(y_test[:, i]))))
+            # bring predictions back to the CPU before numpy()
+            y_pred_part = out.cpu().numpy()
 
+        print(f"Part {feature}: {y_pred_part.shape}")
+        # optionally compute per‐feature loss
+        loss = torch.nn.functional.l1_loss(
+            torch.tensor(y_pred_part[:, 0], device="cpu"),
+            torch.tensor(y_test[:, i], device="cpu")
+        )
+        print("L1 loss:", loss.item())
 
-
-        # Consolidate feature predictions
+        # stash the first column of each feature
         y_pred[:, i] = y_pred_part[:, 0]
-            
-        i += 1
 
-    # Calculate metrics
+    # now proceed exactly as before
     calculate_metrics(y_test, y_pred)
-
-    # plot our regression results
-    plot_results("regression_all", False, y_test, y_pred, X_raw_test, output_features, folder_name)
-
-    plot_box_plots(y_pred=y_pred, y_test=y_test, folder_name=folder_name)
-
-    csv_file = "data/all_models_with_estimates.csv"
-    plot_hls_estimate_box_plots(csv_file, folder_name)
+    plot_results("regression_all", False, y_test, y_pred, X_raw_test,
+                 output_features, folder_name)
+    # only do the full‐model boxplots if we actually predicted more than one feature
+    if y_pred.shape[1] > 1:
+        plot_box_plots(y_pred=y_pred, y_test=y_test, folder_name=folder_name)
+    else:
+        # single feature: just show its one box
+        feat = output_features[0]  # e.g. "LUT_hls"
+        errs = (y_test[:,0] - y_pred[:,0])/(y_test[:,0] + 1)*100
+        plt.figure(figsize=(4,6))
+        plt.boxplot(errs, whis=1.5, showmeans=True, meanline=True)
+        plt.title(f"{feat} Relative % Error")
+        plt.ylabel("Relative % Error")
+        os.makedirs(f"{folder_name}/plots/single/", exist_ok=True)
+        plt.savefig(f"{folder_name}/plots/single/{feat}_box.pdf", bbox_inches="tight")
+        plt.close()
+    # plot_hls_estimate_box_plots("data/all_models_with_estimates.csv",
+    #                             folder_name)
 
 
 def test_regression_classification_union(X_test, X_raw_test, y_test, features_without_classification, feature_classification_task, folder_name, is_graph = False):

@@ -1,19 +1,11 @@
 import json, csv, re, os, glob
-
 import orjson # much faster than json module
+
 def data_reader(fn):
     try:
         return orjson.loads(open(fn, 'rb').read())
     except:
         return None
-
-# def data_reader(fn):
-#     try:
-#         with open(fn) as f:
-#             return json.load(f)
-#     except Exception as e:
-#         print(f"Skipping {fn}: {e}")
-#         return None
 
 def extract_model_features(model_config, hls_config):
     # ── defaults & HLS globals ─────────────────────────────────────────
@@ -31,13 +23,12 @@ def extract_model_features(model_config, hls_config):
     rf       = hls_config["Model"]["ReuseFactor"]
     strategy = hls_config["Model"]["Strategy"]
 
-    # Model.Precision might be a dict {"default": "..."} or a string "fixed<...>"
+    # precision parsing (unchanged)
     prec_cfg = hls_config["Model"]["Precision"]
     if isinstance(prec_cfg, dict):
         default_prec = prec_cfg.get("default", "")
     else:
         default_prec = prec_cfg
-
     m = re.search(r'fixed<(\d+),', default_prec)
     bitwidth = int(m.group(1)) if m else 0
     rf_times_precision = rf * bitwidth
@@ -85,31 +76,23 @@ def extract_model_features(model_config, hls_config):
                         rf_times_precision = rf * bitwidth
                 break
 
-        # activation
-        activation_type = 0
-        idx = model_config.index(conv)
-        for L in model_config[idx+1:]:
-            if L['class_name'] in ("Activation","QActivation"):
-                a = L.get("activation","linear")
-                activation_type = {
-                    "linear":0, "relu":1, "tanh":2,
-                    "sigmoid":3, "softmax":4
-                }[ next(k for k in ("linear","relu","tanh","sigmoid","softmax") if k in a) ]
-                break
-
-        kernel_size = stride = padding = pooling = 0
-
+    # ── dense path (fixed input/output dims) ─────────────────────────
     else:
-        # dense path
-        widths = [L['input_shape'][1] for L in model_config
-                  if L['class_name'] in ("Dense","QDense")]
-        d, dout = widths[0], widths[-1]
-        d_in1, d_in2, d_in3 = 0, d, 0
-        d_out1, d_out2, d_out3 = 0, dout, 0
-        filters = 0
-        layer_type = 0
-        activation_type = 0
-        kernel_size = stride = padding = pooling = 0
+        # ── dense path (true model I/O dims) ────────────────────────
+        dense_layers = [L for L in model_config
+                        if L['class_name'] in ("Dense","QDense")]
+        # true network input = first Dense’s input
+        d_in  = dense_layers[0]["input_shape"][1]
+        # true network output = last Dense’s output
+        d_out = dense_layers[-1]["output_shape"][1]
+
+        d_in1, d_in2, d_in3    = 0, d_in,  0
+        d_out1, d_out2, d_out3 = 0, d_out, 0
+        # filters, layer_type, activation_type, etc. stay at their pre‑initialized 0
+        # filters = 0
+        # layer_type = 0
+        # activation_type = 0
+        # kernel_size = stride = padding = pooling = 0
 
     return {
         "d_in1": d_in1, "d_in2": d_in2, "d_in3": d_in3,
@@ -123,21 +106,27 @@ def extract_model_features(model_config, hls_config):
 
 def parse_file(fn):
     data = data_reader(fn)
+    # unwrap singleton-array wrapper if present
+    if isinstance(data, list) and len(data) == 1:
+        data = data[0]
     if not data:
         return None
 
     # SKIP FAILED RUNS
-    rr = data.get("resource_report", {})
+    rr  = data.get("resource_report")     or {}
     if not rr:
         print(f"Skipping {fn} (empty resource_report)")
         return None
+
     # get the HLS estimates
-    hrr = data.get("hls_resource_report", {})
+    hrr = data.get("hls_resource_report") or {}
+
+    # guard missing latency_report
+    lat = data.get("latency_report", {})
 
     md = data["meta_data"]
     mc = data["model_config"]
     hc = data["hls_config"]
-    lat= data["latency_report"]
 
     f = extract_model_features(mc, hc)
     ms = f"{f['d_in1']}-{f['d_in2']}-{f['d_in3']}-"\
@@ -149,22 +138,22 @@ def parse_file(fn):
       f["d_out1"], f["d_out2"], f["d_out3"],
       f["prec"], md["artifacts_file"], ms,
       f["rf"], f["strategy"],
-      lat["target_clock"], lat["estimated_clock"],
-      lat["cycles_min"], lat["cycles_max"],
-      lat["cycles_min"], lat["cycles_max"],
+      lat.get("target_clock"), lat.get("estimated_clock"),
+      lat.get("cycles_min"),   lat.get("cycles_max"),
+      lat.get("interval_min"), lat.get("interval_max"),
       # original resource_report fields
       rr.get("bram", 0),
       rr.get("dsp", 0),
       rr.get("ff",  0),
       rr.get("lut", 0),
       rr.get("uram",0),
-      # new HLS‐estimate fields
+      # new HLS‑estimate fields
       hrr.get("bram", 0),
       hrr.get("dsp", 0),
       hrr.get("ff",  0),
       hrr.get("lut", 0),
       hrr.get("uram",0),
-      # back to the rest
+      # rest of the features
       f["rf_times_precision"], f["layer_type"],
       f["activation_type"], f["filters"],
       f["kernel_size"], f["stride"], f["padding"],
@@ -206,4 +195,4 @@ def concatenate_json_to_csv(folder, outcsv):
     print("Done:", outcsv)
 
 if __name__=="__main__":
-    concatenate_json_to_csv("4_16", "all_models_with_estimates.csv")
+    concatenate_json_to_csv("4_18_full_with_ii/extracted", "4_18_ALL_models_with_ii.csv")

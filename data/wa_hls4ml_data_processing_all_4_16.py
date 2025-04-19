@@ -25,12 +25,12 @@ pd.set_option('display.max_columns', None)
 #   inputs: d_in, d_2,	d_out, prec, rf, strategy
 #   outputs: TargetClockPeriod_hls,	WorstLatency_hls, IntervalMax_hls, FF_hls, LUT_hls, BRAM_18K_hls, DSP_hls, hls_synth_success
 
-def preprocess_data_from_csv(model_folder, csv_file, input_features, output_features, _binary_feature_names, _numeric_feature_names, _categorical_feature_names, special_feature_names, presaved_mean = None, presaved_stdev = None):
+def preprocess_data_from_csv(model_folder, csv_file, input_features, output_features, _binary_feature_names, _numeric_feature_names, _categorical_feature_names, special_feature_names, presaved_mean = None, presavesd_stdev = None):
     ''' Extract data from a CSV, and preprocess that data '''
 
     # Step 1: Read the CSV file
-    df = pd.read_csv(csv_file)
-    # df = pd.read_csv(csv_file, nrows = 1000) # REMOVE nrows = 1000 after adjustments
+    # df = pd.read_csv(csv_file)
+    df = pd.read_csv(csv_file, nrows = 1000) # REMOVE nrows = 1000 after adjustments
     df.fillna(-1)
     preprocessed_data = []
     processing_input = True
