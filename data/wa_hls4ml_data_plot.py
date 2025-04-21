@@ -4,6 +4,7 @@ import numpy as np
 import os
 
 import pandas as pd # added for estimate plotting
+from matplotlib.lines import Line2D
 
 def plot_loss(name, history, folder_name):
     ''' plot losses during training of a model '''
@@ -137,7 +138,9 @@ def plot_box_plots(y_pred, y_test, folder_name):
     # prediction_errors=[prediction_errors[3],prediction_errors[4],prediction_errors[1],
     #                    prediction_errors[2],prediction_errors[0]]
 
+    # TEMP COMMENT
     prediction_labels = ['BRAM', 'DSP', 'FF', 'LUT', 'Cycles', 'II']
+    # prediction_labels = ['BRAM', 'FF', 'LUT', 'Cycles', 'II']
 
     # --- insert this block here ---
     # map each label to its column in y_test/y_pred:
@@ -149,6 +152,7 @@ def plot_box_plots(y_pred, y_test, folder_name):
     #     4 = BRAM,
     #     5 = DSP
     col_idx = [4, 5, 2, 3, 0, 1]
+    # col_idx = [4, 2, 3, 0, 1]
 
     # build the 6 relative-%‑error arrays in display order
     prediction_errors = [
@@ -274,17 +278,13 @@ def plot_box_plots(y_pred, y_test, folder_name):
 #     plt.close(fig)
 #     print("Saved HLS vs actual boxplots to", outdir)
 
-def plot_hls_estimate_box_plots(csv_file, folder_name):
-    import pandas as pd
-    import numpy as np
-    import matplotlib.pyplot as plt
-    import os
+def plot_hls_estimate_box_plots(csv_file, folder_name): # make symlog
 
     # Read in the CSV
     df = pd.read_csv(csv_file)
-    eps = 1e-9  # tiny offset to avoid true div-by-zero
+    eps = 1e-9  # tiny offset to avoid zero division
 
-    # Find all *_est columns
+    # Find all _est columns
     est_cols = [c for c in df.columns if c.endswith("_est")]
     errors = []
     labels = []
@@ -303,7 +303,7 @@ def plot_hls_estimate_box_plots(csv_file, folder_name):
         print("No *_est columns found or no matching actual columns.")
         return
 
-    # Plot boxplots
+    # plot boxplots
     plt.rcParams.update({"font.size": 14})
     fig, ax = plt.subplots(figsize=(len(labels) * 2, 6))
     bplot = ax.boxplot(
@@ -315,7 +315,7 @@ def plot_hls_estimate_box_plots(csv_file, folder_name):
         patch_artist=True
     )
 
-    # colour the boxes
+    # box color
     for patch, color in zip(bplot["boxes"], plt.cm.Set3.colors):
         patch.set_facecolor(color)
 
@@ -326,11 +326,10 @@ def plot_hls_estimate_box_plots(csv_file, folder_name):
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
 
-    # cap bounds at -150% to +150%
+    # cap bounds at +-150%
     ax.set_ylim(-150, 150)
 
     # add legend for median and mean
-    from matplotlib.lines import Line2D
     median_line = Line2D([0], [0], color='orange', linestyle='--', linewidth=1.5, label='Median')
     mean_line   = Line2D([0], [0], color='green',  linestyle='-',  linewidth=1.5, label='Mean')
     ax.legend(handles=[median_line, mean_line], loc='upper right')

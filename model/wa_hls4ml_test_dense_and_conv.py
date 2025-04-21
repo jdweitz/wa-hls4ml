@@ -41,7 +41,7 @@ def display_results_classifier(X_test, X_raw_test, y_test, output_features, fold
 
     with torch.no_grad():
 
-        # Predict the output for X_test
+        # predict the output for X_test
         if is_graph:
             X_loader = gloader.DataLoader(X_test, batch_size=len(X_test))
             X = next(iter(X_loader))
@@ -54,16 +54,16 @@ def display_results_classifier(X_test, X_raw_test, y_test, output_features, fold
     if np.isnan(y_pred).any():
         print("First few NaN indices in y_pred:", np.argwhere(np.isnan(y_pred))[:10])
         print("Their values:", y_pred[np.isnan(y_pred)])
-    # Calculate metrics
+    # calculate metrics
     calculate_metrics(y_test, y_pred)
 
-    # Calculate confusion matrix
+    # calculate confusion matrix
     y_pred_binary = np.where(y_pred > 0.5, 1, 0)
     confusion = confusion_matrix(y_pred_binary, y_test)
     print('Confusion matrix:')
     print(confusion)
 
-    # plot our classification results
+    # plot classification results
     y_test_2d = np.reshape(y_test, (y_test.shape[0], 1))
     plot_results("classifier", False, y_test_2d, y_pred, X_raw_test, output_features, folder_name)
 
@@ -122,20 +122,35 @@ def display_results_regressor(X_test, X_raw_test, y_test,
         model = model.to(device)
         model.eval()
 
+        # with torch.no_grad():
+        #     if is_graph:
+        #         # build one big batch, then .to(device)
+        #         loader = gloader.DataLoader(X_test, batch_size=len(X_test)) # THIS IS WAY TOO BIG AND CAUSE OF THE MEMORY ISSUE NEED TO DO IT IN BATCHES
+        #         batch = next(iter(loader)).to(device)
+        #         out = model(batch)
+
         with torch.no_grad():
             if is_graph:
-                # build one big batch, then .to(device)
-                loader = gloader.DataLoader(X_test, batch_size=len(X_test))
-                batch = next(iter(loader)).to(device)
-                out = model(batch)
+                # graph: batched inference
+                loader = gloader.DataLoader(
+                    X_test,
+                    batch_size=512,          # can adjust
+                    shuffle=False,
+                    num_workers=0,
+                    pin_memory=False,
+                )
+                all_preds = []
+                for batch in loader:
+                    batch = batch.to(device)
+                    out   = model(batch)
+                    all_preds.append(out.cpu().numpy())
+                y_pred_part = np.vstack(all_preds)       # only once in this branch
 
             else:
-                # turn your numpy array into a tensor on `device`
+                # non‑graph: one big tensor  (may run out of memorory if X_test is huge)
                 inputs = torch.tensor(X_test, dtype=torch.float32, device=device)
-                out = model(inputs)
-
-            # bring predictions back to the CPU before numpy()
-            y_pred_part = out.cpu().numpy()
+                out    = model(inputs)
+                y_pred_part = out.cpu().numpy()
 
         print(f"Part {feature}: {y_pred_part.shape}")
         # optionally compute per‐feature loss

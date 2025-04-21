@@ -373,32 +373,33 @@ if __name__ == '__main__':
         dev="cpu" # may need to change to device and cuda cpu
     )
 
-    # reload the full DataFrame with its stratification key
-    df = pd.read_csv(csv_file)
-    df['type'] = df['model_name'].apply(lambda n: (
-        '2layer'   if '2layer'   in n else
-        '3layer'   if '3layer'   in n else
-        'conv1d'   if 'conv1d'   in n else
-        'conv2d'   if 'conv2d'   in n else
-        'manylayer'
-    ))
+    # COMMENTED THE BELOW AFTER RUNNING ONCE NOW THAT WE HAVE THE SET
+    # # reload the full DataFrame with its stratification key
+    # df = pd.read_csv(csv_file)
+    # df['type'] = df['model_name'].apply(lambda n: (
+    #     '2layer'   if '2layer'   in n else
+    #     '3layer'   if '3layer'   in n else
+    #     'conv1d'   if 'conv1d'   in n else
+    #     'conv2d'   if 'conv2d'   in n else
+    #     'manylayer'
+    # ))
 
-    # do the exact same stratified split
-    df_train, df_test = sklearn.model_selection.train_test_split(
-        df,
-        test_size=0.2,
-        random_state=42,
-        shuffle=True,
-        stratify=df['type']
-    )
+    # # do the exact same stratified split
+    # df_train, df_test = sklearn.model_selection.train_test_split(
+    #     df,
+    #     test_size=0.2,
+    #     random_state=42,
+    #     shuffle=True,
+    #     stratify=df['type']
+    # )
 
-    # dump CSVs
-    df_train.to_csv("train_test_split/train_split.csv", index=False)
-    df_test .to_csv("train_test_split/test_split.csv",  index=False)
+    # # dump CSVs
+    # df_train.to_csv("train_test_split/train_split.csv", index=False)
+    # df_test .to_csv("train_test_split/test_split.csv",  index=False)
 
-    # dump JSON arrays
-    df_train.to_json("train_test_split/train_split.json", orient="records")
-    df_test .to_json("train_test_split/test_split.json",  orient="records")
+    # # dump JSON arrays
+    # df_train.to_json("train_test_split/train_split.json", orient="records")
+    # df_test .to_json("train_test_split/test_split.json",  orient="records")
 
     # added the below to ensure that we are passing the correct features
 

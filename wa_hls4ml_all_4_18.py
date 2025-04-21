@@ -14,8 +14,9 @@ from data.wa_hls4ml_plotly import plot_results
 from model.wa_hls4ml_dense_and_conv_model import save_model, load_model
 from model.wa_hls4ml_train_dense_and_conv import train_classifier, train_regressor
 from model.wa_hls4ml_test_dense_and_conv import calculate_metrics, display_results_classifier,display_results_regressor, test_regression_classification_union
-from data.wa_hls4ml_data_processing_conv2d import preprocess_data
-# from data.wa_hls4ml_data_processing_all_4_18_TEST import preprocess_data
+# from data.wa_hls4ml_data_processing_all_4_18_TEST import preprocess_data # USE TO TEST ON SMALL SET
+from data.wa_hls4ml_data_processing_all_4_18 import preprocess_data # TO USE
+
 
 # define the device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
