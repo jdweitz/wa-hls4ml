@@ -159,7 +159,24 @@ def parse_json_string(json, mean_val, stdev_val):
 def create_graph_tensor(input_values, input_raw_values, input_json, mean, stdev, dev):
     ''' Turn the data into the form of a GraphTensor to allow for GNN use ''' 
 
-    input_values_2 = np.asarray(input_values[2:]).astype('float32') # for resource and latency
+    # input_values_2 = np.asarray(input_values[2:]).astype('float32') # for resource and latency
+
+    # # CHANGE MADE HERE
+    keep_idx = [6, 7, 8, 9] # this is hardcoded based on the location of the features: "prec","rf","strategy","rf_times_precision"
+    input_values_2  = input_values[keep_idx].astype('float32') 
+
+    # # DEBUG: check the features
+    # INPUT_FEATURES = [
+    #     "d_in1","d_in2","d_in3",
+    #     "d_out1","d_out2","d_out3",
+    #     "prec","rf","strategy","rf_times_precision",
+    #     "layer_type","activation_type","filters",
+    #     "kernel_size","stride","padding","pooling"
+    # ]
+
+    # names = [INPUT_FEATURES[i] for i in keep_idx]
+    # # names  = INPUT_FEATURES[2:]
+    # print(f"[DEBUG] globals → {list(zip(names, input_values_2.tolist()))}")
 
     # parse model string into distinct nodes and edges
     nodes_count, source, target, raw_nodes_count = parse_json_string(input_json, (mean[0]+mean[1])/2, (stdev[0]+stdev[1])/2)

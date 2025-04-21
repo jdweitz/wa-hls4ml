@@ -12,6 +12,8 @@ from torch_geometric.data import Data
 # should be the other parse file so that it parses the other features (but won't need parsing bc already did it)
 
 # from wa_hls4ml_json_to_one_csv_all_4_18 import parse_file # for just running this file
+
+# UNCOMMENT THE BELOW AND COMMENT THE ABOVE BEFORE RUNNING THE MAIN FILE
 from data.wa_hls4ml_json_to_one_csv_all_4_18 import parse_file # for running wa_hls4ml.py
 
 import os
@@ -45,6 +47,7 @@ def preprocess_data_from_csv(model_folder, csv_file, input_features, output_feat
 
         # Steps 3-6: Process binary, numeric, and categorical features
         preprocessed_inputs = preprocess_features(input_data, binary_feature_names, numeric_feature_names, categorical_feature_names, presaved_mean, presaved_stdev, model_folder, processing_input)
+        print("Preprocessed inputs shape:", preprocessed_inputs.shape) # added to check
         processing_input = False
 
         # Step 7: Convert the preprocessed data to numpy arrays
@@ -159,7 +162,26 @@ def parse_json_string(json, mean_val, stdev_val):
 def create_graph_tensor(input_values, input_raw_values, input_json, mean, stdev, dev):
     ''' Turn the data into the form of a GraphTensor to allow for GNN use ''' 
 
-    input_values_2 = np.asarray(input_values[2:]).astype('float32') # for resource and latency
+    # CHANGE HERE TO CORRECTLY INDEX THE GLOBAL FEATURES
+    # input_values_2 = np.asarray(input_values[2:]).astype('float32') # for resource and latency #COMMENTED
+    # may have actually extracted different columns bc of the change of indexing after the changes
+
+    # # CHANGE MADE HERE
+    keep_idx = [6, 7, 8, 9] # this is hardcoded based on the location of the features: "prec","rf","strategy","rf_times_precision"
+    input_values_2  = input_values[keep_idx].astype('float32') 
+
+    # # DEBUG: check the features
+    # INPUT_FEATURES = [
+    #     "d_in1","d_in2","d_in3",
+    #     "d_out1","d_out2","d_out3",
+    #     "prec","rf","strategy","rf_times_precision",
+    #     "layer_type","activation_type","filters",
+    #     "kernel_size","stride","padding","pooling"
+    # ]
+
+    # names = [INPUT_FEATURES[i] for i in keep_idx]
+    # # names  = INPUT_FEATURES[2:]
+    # print(f"[DEBUG] globals → {list(zip(names, input_values_2.tolist()))}")
 
     # parse model string into distinct nodes and edges
     nodes_count, source, target, raw_nodes_count = parse_json_string(input_json, (mean[0]+mean[1])/2, (stdev[0]+stdev[1])/2)
@@ -338,12 +360,13 @@ def preprocess_data(
 
 # Added the below to preprocess
 if __name__ == '__main__':
-    model_folder = "ALL_models_4_18"  # model folder
+    model_folder = "TEST2_4_20"  # model folder
     csv_file = "4_18_ALL_models_with_ii.csv"      # csv path
     # needs_json_parsing to false, already a csv
     X_train, X_test, y_train, y_test, X_raw_train, X_raw_test = preprocess_data(
         model_folder=model_folder,
-        is_graph=False,
+        # is_graph=False,
+        is_graph=True,
         input_folder=csv_file,
         needs_json_parsing=False,
         doing_train_test_split=True,
@@ -376,3 +399,19 @@ if __name__ == '__main__':
     # dump JSON arrays
     df_train.to_json("train_test_split/train_split.json", orient="records")
     df_test .to_json("train_test_split/test_split.json",  orient="records")
+
+    # added the below to ensure that we are passing the correct features
+
+#     # Added the below to preprocess
+# if __name__ == '__main__':
+#     model_folder = "all_TEST_4_20_model_folder"  # model folder
+#     csv_file = "4_18_ALL_models_with_ii.csv"      # csv path
+#     # needs_json_parsing to false, already a csv
+#     X_train, X_test, y_train, y_test, X_raw_train, X_raw_test = preprocess_data(
+#         model_folder=model_folder,
+#         is_graph=False,
+#         input_folder=csv_file,
+#         needs_json_parsing=False,
+#         doing_train_test_split=True,
+#         dev="cpu"
+#     )
