@@ -20,6 +20,8 @@ import math
 def preprocess_data_from_csv(model_folder, csv_file, input_features, output_features, _binary_feature_names, _numeric_feature_names, _categorical_feature_names, special_feature_names, presaved_mean = None, presaved_stdev = None):
     ''' Extract data from a CSV, and preprocess that data '''
 
+    # print("***", input_features )
+
     # Step 1: Read the CSV file
     df = pd.read_csv(csv_file)
     df.fillna(-1)
@@ -151,6 +153,9 @@ def create_graph_tensor(input_values, input_raw_values, input_json, mean, stdev,
 
     input_values_2 = np.asarray(input_values[2:]).astype('float32') # for resource and latency
 
+    print("!!!!", input_values_2.shape)
+    print(input_values_2)
+
     # parse model string into distinct nodes and edges
     nodes_count, source, target, raw_nodes_count = parse_json_string(input_json, (mean[0]+mean[1])/2, (stdev[0]+stdev[1])/2)
 
@@ -166,9 +171,17 @@ def create_graph_tensor(input_values, input_raw_values, input_json, mean, stdev,
         else:
             next_nodes = raw_nodes_count[i+1]
         
-        p = input_raw_values[3]
+        # p = input_raw_values[3] # this needs to be precision
+        p = input_raw_values[-6] # this needs to be precision
+        # print("@@@", input_raw_values)
+        # print("$$$", p)
+        # print("curr_nodes: ", curr_nodes)
+        # print("next_nodes: ", next_nodes)
         
-        bops = curr_nodes * next_nodes * ( p**2 + 2 * p + math.log2(curr_nodes) )
+        if curr_nodes <= 0:
+            bops = 0.0
+        else:        
+            bops = curr_nodes * next_nodes * ( p**2 + 2 * p + math.log2(curr_nodes) )
 
         # arrange these to the same or similar order of magnitude as other values
         bops = math.sqrt(bops)/1000
@@ -194,15 +207,18 @@ def create_graph_tensor(input_values, input_raw_values, input_json, mean, stdev,
 def preprocess_data(model_folder, is_graph = False, input_folder="../results/results_combined.csv", needs_json_parsing = False, is_already_serialized = False, mean = None, stdev = None, doing_train_test_split = True, dev = "cpu"):
     ''' Preprocess the data '''
 
-    input_features = ["d_in", "d_out", "prec", "rf", "strategy", "rf_times_precision"]
+    # input_features = ["d_in", "d_out", "prec", "rf", "strategy", "rf_times_precision"]
+    input_features = ["d_in1", "d_in2", "d_in3", "d_out1", "d_out2", "d_out3", "layer_type", "activation_type", "filters", "kernel_size", "stride", "padding", "pooling", "prec", "rf", "strategy", "rf_times_precision"]
     output_features = ["WorstLatency_hls", "IntervalMax_hls", "FF_hls", "LUT_hls", "BRAM_18K_hls", "DSP_hls", "hls_synth_success"]
     binary_feature_names = ['hls_synth_success']
-    numeric_feature_names = ["d_in", "d_2", "d_out", "prec", "rf", "WorstLatency_hls", "IntervalMax_hls", "FF_hls", "LUT_hls",
+    # numeric_feature_names = ["d_in", "d2", "d_out", "prec", "rf", "WorstLatency_hls", "IntervalMax_hls", "FF_hls", "LUT_hls",
+    #                          "BRAM_18K_hls", "DSP_hls", "rf_times_precision"]
+    numeric_feature_names = ["d_in1", "d_in2", "d_in3", "d_out1", "d_out2", "d_out3", "layer_type", "activation_type", "filters", "kernel_size", "stride", "padding", "pooling", "prec", "rf", "WorstLatency_hls", "IntervalMax_hls", "FF_hls", "LUT_hls",
                              "BRAM_18K_hls", "DSP_hls", "rf_times_precision"]
     categorical_feature_names = ["strategy"]
     special_feature_names = ["model_string"] # what is this? 104-48-104-104 for a 3 layer model, 80-24-120 for a 2 layer model for example
 
-    if needs_json_parsing:
+    if needs_json_parsing: # need to import the correct json to csv
         parse_file(input_folder)
         input_folder = 'auto_parsed_json.csv'
 
@@ -251,14 +267,19 @@ def preprocess_data(model_folder, is_graph = False, input_folder="../results/res
 
 # Added the below to preprocess
 if __name__ == '__main__':
-    model_folder = "conv2d_model_folder"  # model folder
-    csv_file = "concatenated_conv2d_json_to_csv.csv"      # csv path
+    model_folder = "TESTING_FEATURE_CHANGE"  # model folder
+    csv_file = "4_18_ALL_models_with_ii.csv"      # csv path
     # needs_json_parsing to false, already a csv
     X_train, X_test, y_train, y_test, X_raw_train, X_raw_test = preprocess_data(
         model_folder=model_folder,
-        is_graph=False,
+        is_graph=True, #changed
         input_folder=csv_file,
         needs_json_parsing=False,
         doing_train_test_split=True,
-        dev="cpu"
+        dev="cpu",
+        is_already_serialized=False
     )
+    # print(f"y_train shape: {y_train.shape}")
+
+    # print("first few values of y_train:")
+    # print(y_train[:3,:])

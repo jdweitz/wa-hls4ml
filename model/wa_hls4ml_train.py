@@ -201,6 +201,7 @@ def general_train(X_train, y_train, model, loss_function, is_graph, batch_size, 
         if test_loss < best_loss:
             best_loss = test_loss
             best_model = copy.deepcopy(model)
+            save_model(best_model, directory)
 
     model.eval()
 
@@ -224,7 +225,7 @@ def train_classifier(X_train, y_train, folder_name, is_graph, dev = "cpu"):
     batch = 512
     # batch = 2
     # epochs = 250
-    epochs = 2
+    epochs = 200
 
     learning_rate = 0.0001
     weight_decay = 0.001
@@ -243,7 +244,7 @@ def train_regressor(X_train, y_train, output_features, folder_name, is_graph, de
     batch = 512
     # batch = 2
     # epochs = 350
-    epochs = 2
+    epochs = 200
 
     learning_rate = 0.01
     weight_decay = 0.001
@@ -255,7 +256,7 @@ def train_regressor(X_train, y_train, output_features, folder_name, is_graph, de
 
     if is_graph:
         # epochs = 350
-        epochs = 2
+        epochs = 200
         batch = 512
         # batch = 2
         learning_rate = 0.001 

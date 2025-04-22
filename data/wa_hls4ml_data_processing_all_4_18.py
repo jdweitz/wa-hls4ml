@@ -11,10 +11,10 @@ from torch_geometric.data import Data
 
 # should be the other parse file so that it parses the other features (but won't need parsing bc already did it)
 
-# from wa_hls4ml_json_to_one_csv_all_4_18 import parse_file # for just running this file
+from wa_hls4ml_json_to_one_csv_all_4_18 import parse_file # for just running this file
 
 # UNCOMMENT THE BELOW AND COMMENT THE ABOVE BEFORE RUNNING THE MAIN FILE
-from data.wa_hls4ml_json_to_one_csv_all_4_18 import parse_file # for running wa_hls4ml.py
+# from data.wa_hls4ml_json_to_one_csv_all_4_18 import parse_file # for running wa_hls4ml.py
 
 import os
 import sys
@@ -338,6 +338,20 @@ def preprocess_data(
                 X_norm[i], X_raw[i], spec[0], mean, stdev, dev
             )
             graph_list.append(graph)
+            # # --- DEBUG: verify graph.y matches CSV outputs ---
+            # if i < 5:  # only check first few samples
+            #     # pick relevant output columns to compare
+            #     expected = df.loc[i, [
+            #         "TargetClockPeriod_hls","EstimatedClockPeriod_hls",
+            #         "BestLatency_hls","WorstLatency_hls",
+            #         "IntervalMin_hls","IntervalMax_hls",
+            #         "BRAM_18K_hls","DSP_hls","FF_hls",
+            #         "LUT_hls","URAM_hls"
+            #     ]].astype(float).values
+            #     actual = graph.y.cpu().numpy()[:len(expected)]
+            #     print(f"[DEBUG graph-{i}] expected outputs:", expected)
+            #     print(f"[DEBUG graph-{i}] graph.y values:   ", actual)
+            # # -----------------------------------------------
         X = graph_list
     else:
         X = X_norm
@@ -360,7 +374,8 @@ def preprocess_data(
 
 # Added the below to preprocess
 if __name__ == '__main__':
-    model_folder = "TEST2_4_20"  # model folder
+    print("fishing")
+    model_folder = "DEBUG_4_20"  # model folder
     csv_file = "4_18_ALL_models_with_ii.csv"      # csv path
     # needs_json_parsing to false, already a csv
     X_train, X_test, y_train, y_test, X_raw_train, X_raw_test = preprocess_data(
@@ -372,6 +387,7 @@ if __name__ == '__main__':
         doing_train_test_split=True,
         dev="cpu" # may need to change to device and cuda cpu
     )
+    print("hello")
 
     # COMMENTED THE BELOW AFTER RUNNING ONCE NOW THAT WE HAVE THE SET
     # # reload the full DataFrame with its stratification key

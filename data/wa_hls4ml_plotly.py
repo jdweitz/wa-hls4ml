@@ -2,11 +2,16 @@ import matplotlib.pyplot as plt
 import numpy as np
 import math
 import os, sys
+    # Create a subplot
+import plotly.subplots as sp
 
 
 def plot_results(name, mpl_plots, y_test, y_pred, X_raw_test, output_features, folder_name):
 
     print("CHECK: X_raw_test shape:", np.asarray(X_raw_test).shape) # check the shape to figure out the plotting indexing error
+    
+    print("   y_test shape:", np.asarray(y_test).shape,
+      "   y_pred shape:", np.asarray(y_pred).shape)
 
     colors = ['blue', 'green', 'red', 'cyan', 'magenta', 'yellow', 'orange']
 
@@ -46,8 +51,6 @@ def plot_results(name, mpl_plots, y_test, y_pred, X_raw_test, output_features, f
     n_cols = 2
     n_rows = math.ceil(n_features / n_cols)
 
-    # Create a subplot
-    import plotly.subplots as sp
     fig = sp.make_subplots(rows=n_rows, cols=n_cols,
                            vertical_spacing=0.03, horizontal_spacing=0.03,
                             x_title='Actual Value',
